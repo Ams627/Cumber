@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "CumberTest": {
+      "commandName": "Project",
+      "commandLineArgs": "doit all --briefly"
+    }
+  }
+}

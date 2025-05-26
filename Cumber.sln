@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.13.36105.23
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CumberTest", "CumberTest\CumberTest.csproj", "{54BCC3A7-308C-4F49-AA72-10D2E2B51A8B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CumberCli", "CumberCli\CumberCli.csproj", "{FBFB8311-AF9D-A916-E71C-49761FBEADCA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{54BCC3A7-308C-4F49-AA72-10D2E2B51A8B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{54BCC3A7-308C-4F49-AA72-10D2E2B51A8B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{54BCC3A7-308C-4F49-AA72-10D2E2B51A8B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{54BCC3A7-308C-4F49-AA72-10D2E2B51A8B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FBFB8311-AF9D-A916-E71C-49761FBEADCA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FBFB8311-AF9D-A916-E71C-49761FBEADCA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FBFB8311-AF9D-A916-E71C-49761FBEADCA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FBFB8311-AF9D-A916-E71C-49761FBEADCA}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {12A87BDB-A817-46BD-AC59-6D3B4DCB7FD1}
+	EndGlobalSection
+EndGlobal

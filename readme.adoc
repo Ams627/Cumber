@@ -1,0 +1,96 @@
+= Help Text Syntax Specification
+
+== 1. Command Sections
+
+Lines starting with one or more `=` define a command and start a new help section.
+
+* `=`       - Top-level help (shown when no command is given or `--help` is used)
+* `==`, `===` etc. - Subcommands and deeper levels
+
+A brief description may follow the command after a dash (`-`), ignoring whitespace:
+
+----
+== add - Add a new item
+----
+
+== 2. Option Groups
+
+You can define reusable groups of options:
+
+----
+@group common
+    -v, --verbose        Enable verbose output
+    -q, --quiet          Suppress output
+----
+
+To reuse them in a command section:
+
+----
+@include common
+----
+
+== 3. Options Section
+
+A section starts with:
+
+----
+Options:
+----
+
+Each option line can include:
+
+* Short name (e.g. `-v`)
+* Long name (e.g. `--verbose`)
+* Parameters (in angle brackets)
+
+Optional types can be added as `<name:type>`:
+
+----
+-s, --source <file:string> <mode>
+----
+
+Either short or long name may be omitted.
+
+== 4. Subcommand Listing
+
+Use the macro `$(subcommands)` to automatically insert a list of direct subcommands (and their summaries) for the current section.
+
+Example:
+
+----
+$(subcommands)
+----
+
+Will render:
+
+----
+  add     - Add something
+  remove  - Remove something
+----
+
+== 5. Text Formatting
+
+AsciiDoc-style markup is supported:
+
+* `*bold*`
+* `_italic_`
+* `[underline]#underlined#`
+* `[green]#colored text#`
+
+Rendered using ANSI escape sequences if the terminal supports them.
+
+== 6. Comments
+
+Lines starting with `#` are comments and ignored.
+
+To include a literal `#`, escape with backslash: `\#`.
+
+== 7. Pre-section Text
+
+Text before the first `=` section is ignored for help rendering, but may contain banner text or `@group` definitions.
+
+== 8. Options and Parameters Parsing Rules
+
+* Option sections may be multiline (continuation by indentation).
+* Parameters are tracked per option.
+* Options are grouped using the `@group` mechanism and matched by command path at runtime.
