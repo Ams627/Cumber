@@ -49,61 +49,75 @@ public class HelpTextParser
     public static List<HelpSection> Parse(string rawText)
     {
         bool foundFirstHeader = false;
-        var definedGroups = new Dictionary<string, List<Option>>();
+        var definedGroups = new Dictionary<string, List<OptionBuilder>>();
         var lines = rawText.Replace("\r", "").Split('\n');
         List<HelpSection> sections = [];
 
         HelpSection? currentSection = null;
-        string? currentGroup = null;
+        string? currentGroupName = null;
         OptionBuilder? currentBuilder = null;
         bool inOptions = false;
+        bool collectingOptionDescription = false;
 
         var commandStack = new Stack<string>();
 
         foreach (var rawLine in lines)
         {
-            var line = rawLine.TrimEnd();
+            var endTrimmedLine = rawLine.TrimEnd();
 
             if (!foundFirstHeader)
             {
-                if (HelpTextRegexes.HeaderRegex.IsMatch(line))
+                if (HelpTextRegexes.HeaderRegex.IsMatch(endTrimmedLine))
                 {
                     foundFirstHeader = true;
                 }
                 else
                 {
-                    if (line.StartsWith("@group "))
+                    var defineGroupMatch = HelpTextRegexes.DefineGroupRegex.Match(rawLine);
+                    if (!defineGroupMatch.Success || !defineGroupMatch.Groups["groupName"].Success)
                     {
-                        currentGroup = line[7..].Trim();
-                        definedGroups[currentGroup] = [];
                         continue;
                     }
-
-                    if (currentGroup != null && HelpTextRegexes.OptionLineRegex.IsMatch(line))
-                    {
-                        definedGroups[currentGroup].Add(ParseOptionLine(line, "@group"));
-                    }
+                    currentGroupName = defineGroupMatch.Groups["groupName"].Value;
+                    definedGroups[currentGroupName] = [];
                     continue;
                 }
+
+                if (currentGroupName != null)
+                {
+                    if (HelpTextRegexes.OptionLineRegex.IsMatch(endTrimmedLine))
+                    {
+                        definedGroups[currentGroupName].Add(ParseOptionLine(endTrimmedLine, "@group"));
+                        collectingOptionDescription = true;
+                    }
+                    else if (collectingOptionDescription && HelpTextRegexes.WhiteSpaceAtStart.IsMatch(endTrimmedLine))
+                    {
+                        definedGroups[currentGroupName][^1].AppendDescription(" ");
+                        definedGroups[currentGroupName][^1].AppendDescription(endTrimmedLine.Trim());
+                    }
+                    else
+                    {
+                        collectingOptionDescription = false;
+                    }
+                }
+                continue;
             }
 
-            if (string.IsNullOrWhiteSpace(line)) continue;
-
-            var headerMatch = HelpTextRegexes.HeaderRegex.Match(line);
+            var headerMatch = HelpTextRegexes.HeaderRegex.Match(endTrimmedLine);
             if (headerMatch.Success)
             {
                 int level = headerMatch.Groups["headerIntroducer"].Value.Length;
-                var headerContent = headerMatch.Groups["commandName"].Value.Trim();
-                var name = headerContent;
+                var command = headerMatch.Groups["commandName"].Value;
+                var name = command;
                 var summary = "";
-                var dashIndex = headerContent.IndexOf(" - ");
+                var dashIndex = command.IndexOf(" - ");
                 if (dashIndex >= 0)
                 {
-                    name = headerContent[..dashIndex].Trim();
-                    summary = headerContent[(dashIndex + 3)..].Trim();
+                    name = command[..dashIndex].Trim();
+                    summary = command[(dashIndex + 3)..].Trim();
                 }
 
-                while (commandStack.Count >= level)
+                while (commandStack.Count >= level - 1)
                 {
                     commandStack.Pop();
                 }
@@ -119,70 +133,68 @@ public class HelpTextParser
 
             if (currentSection == null) continue;
 
-            if (line.Trim().Equals("Options:", StringComparison.OrdinalIgnoreCase))
+            if (endTrimmedLine.Trim().Equals("Options:", StringComparison.OrdinalIgnoreCase))
             {
+                currentSection.HelpText += "Options:" + Environment.NewLine;
                 inOptions = true;
                 continue;
             }
 
             if (inOptions)
             {
-                if (line.Trim().StartsWith("@include "))
+                // allow @include to include option groups:
+                var includeMatch = HelpTextRegexes.IncludeGroupRegex.Match(endTrimmedLine);
+                if (includeMatch.Success)
                 {
-                    var groupName = line.Trim()[9..].Trim();
-                    if (definedGroups.TryGetValue(groupName, out var groupOptions))
+                    var grpNameMatch = includeMatch.Groups["groupName"];
+                    if (grpNameMatch.Success)
                     {
-                        foreach (var opt in groupOptions)
+                        var groupName = grpNameMatch.Value;
+                        if (definedGroups.TryGetValue(groupName, out var groupOptions))
                         {
-                            var copied = new OptionBuilder()
-                                .WithShortOption(opt.ShortOption)
-                                .WithLongOption(opt.LongOption)
-                                .WithGroup(currentSection.CommandPath)
-                                .WithDescription(opt.Description);
-
-                            foreach (var param in opt.Parameters)
-                                copied.WithParameter(param.Name, param.Type);
-
-                            currentSection.Options.Add(copied.Build());
+                            var wsGrp = includeMatch.Groups["whiteSpace"];
+                            var indent = wsGrp.Success ? wsGrp.Value : string.Empty;
+                            foreach (var optBuilder in groupOptions)
+                            {
+                                var opt = optBuilder.Build();
+                                currentSection.Options.Add(opt);
+                                currentSection.HelpText += $"{indent}{opt.Description}";
+                            }
                         }
                     }
                     continue;
                 }
 
-                if (HelpTextRegexes.OptionLineRegex.IsMatch(line))
+                // check for lines matching an option specification:
+                if (HelpTextRegexes.OptionLineRegex.IsMatch(endTrimmedLine))
                 {
-                    var option = ParseOptionLine(line, currentSection.CommandPath);
-                    currentSection.Options.Add(option);
-                    currentBuilder = new OptionBuilder()
-                        .WithShortOption(option.ShortOption)
-                        .WithLongOption(option.LongOption)
-                        .WithGroup(option.Group)
-                        .WithDescription(option.Description);
-
-                    foreach (var param in option.Parameters)
-                        currentBuilder.WithParameter(param.Name, param.Type);
+                    var optionBuilder = ParseOptionLine(endTrimmedLine, currentSection.CommandPath);
+                    currentSection.Options.Add(optionBuilder.Build());
+                    currentSection.HelpText += FormatAsciiDoc(endTrimmedLine) + Environment.NewLine;
                 }
-                else if (currentBuilder != null && line.StartsWith(" "))
+                else if (currentBuilder != null && endTrimmedLine.StartsWith(" "))
                 {
                     var last = currentSection.Options.Last();
-                    currentSection.Options[^1] = last with { Description = last.Description + Environment.NewLine + line.Trim() };
+                    currentSection.Options[^1] = last with { Description = last.Description + Environment.NewLine + FormatAsciiDoc(endTrimmedLine.Trim()) };
+                }
+                else
+                {
+                    currentSection.HelpText += endTrimmedLine + Environment.NewLine;
                 }
             }
-            else if (line.TrimStart().StartsWith("#"))
+            else if (endTrimmedLine.TrimStart().StartsWith("#"))
             {
                 continue; // skip comment lines
             }
             else
             {
-                var cleanLine = line.StartsWith("\\#") ? line[1..] : line;
-                currentSection.HelpText += FormatAsciiDoc(cleanLine) + "\n";
+                var cleanLine = endTrimmedLine.StartsWith("\\#") ? endTrimmedLine[1..] : endTrimmedLine;
+                currentSection.HelpText += FormatAsciiDoc(cleanLine) + Environment.NewLine;
             }
         }
 
         return sections;
     }
-
-
 
     public static void PrintHelp(List<HelpSection> sections, string commandPath)
     {
@@ -254,7 +266,7 @@ public class HelpTextParser
         return input;
     }
 
-    private static Option ParseOptionLine(string line, string group)
+    private static OptionBuilder ParseOptionLine(string line, string group)
     {
         var match = HelpTextRegexes.OptionLineRegex.Match(line);
         var shortName = match.Groups[1].Success ? match.Groups[1].Value[0] : (char?)null;
@@ -273,23 +285,21 @@ public class HelpTextParser
             }
         }
 
-        var key = match.Groups.Cast<Group>().LastOrDefault(g => g.Success)?.Value ?? longName ?? shortName?.ToString() ?? "";
-        var descStart = line.IndexOf(key);
-        var desc = descStart >= 0 ? line[(descStart + key.Length)..].Trim() : "";
-
         var builder = new OptionBuilder()
             .WithShortOption(shortName)
             .WithLongOption(longName)
             .WithGroup(group)
-            .WithDescription(desc);
+            .AppendDescription(line);
 
         foreach (var (name, type) in parameters)
+        {
             builder.WithParameter(name, type);
+        }
 
-        return builder.Build();
+        return builder;
     }
 
-    public static bool GetHelpTextWithOptions(string[] args, int n, List<HelpSection> sections, out string helpText)
+    public static bool GetHelpTextWithOptions(string tool, string[] args, int n, List<HelpSection> sections, out string helpText)
     {
         helpText = "";
         var command = string.Join(" ", args.Take(n));

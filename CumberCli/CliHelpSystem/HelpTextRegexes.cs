@@ -11,23 +11,49 @@ public static class HelpTextRegexes
                     ^(?'headerIntroducer'=+)            # one or more equals signs
                     \s*                                 # white space
                     (?'commandName'[^\s]+)              # command name (cannot contain a space)
-                    ((?'emptysummary'\s+-\s*$)|(\s+-\s*(?'commandSummary'.+[^\s])\s*$))?
+                    (?:
+                    (\s+-\s*(?'commandSummary'.+[^\s])\s*$)
+                    |
+                    (?'emptysummary'\s+-\s*$)
+                    )?
                     $
                     """, RegexOptions.IgnorePatternWhitespace);
 
+    public static Regex IncludeGroupRegex => new Regex("""
+                    ^(?'whitespace'\s*)            # zero or more whitespace characters
+                    (?:@include\s+)                # @include
+                    (?'groupName'\w+)              # group name
+                    $
+                    """, RegexOptions.IgnorePatternWhitespace);
+
+
+    public static Regex DefineGroupRegex => new Regex("""
+                    ^(?'whitespace'\s*)            # zero or more whitespace characters
+                    (?:@group\s+)                  # @include
+                    (?'groupName'\w+)              # group name
+                    $
+                    """, RegexOptions.IgnorePatternWhitespace);
+
+
     public static readonly Regex OptionLineRegex = new(
-    """
-            ^\s*                            # Leading whitespace
-            (?:-(\w),?\s*)?                 # Optional short option (e.g. -f or -f,)
-            (--[\w-]+)?                     # Optional long option (e.g. --file)
-            (?:\s+(<[^>]+>|\[[^\]]+\]))?    # Optional parameter 1
-            (?:\s+(<[^>]+>|\[[^\]]+\]))?    # Optional parameter 2
-            (?:\s+(<[^>]+>|\[[^\]]+\]))?    # Optional parameter 3
-            .*                              # Remainder (description)
-        """,
-    RegexOptions.IgnorePatternWhitespace
-);
+        """
+                    ^\s*                                # Leading whitespace
+                    (?'option'                          # start of option group (includes both options - must have one of them!)
+                    (?'both'-(?'shortOption'\w),?\s*)?(?:--(?'longOption'[\w-]+))        # long option (e.g. --file)
+                    |                                   # alternation
+                    (?:-(?'shortOption'\w)\s*)          # short option (e.g. -f or -f,)
+                    )                                   # end of option group
+                    (?:\s+(<[^>]+>|\[[^\]]+\]))?        # Optional parameter 1
+                    (?:\s+(<[^>]+>|\[[^\]]+\]))?        # Optional parameter 2
+                    (?:\s+(<[^>]+>|\[[^\]]+\]))?        # Optional parameter 3
+                    .*                                  # Remainder (description)
+                """,
+        RegexOptions.IgnorePatternWhitespace
+        );
 
 
+
+
+    public static readonly Regex WhiteSpaceAtStart = new("""^\s+ # Leading whitespace""", RegexOptions.IgnorePatternWhitespace);
 }
 

@@ -1,12 +1,14 @@
-﻿namespace Cumber.CliOption;
+﻿using System.Text;
+
+namespace Cumber.CliOption;
 public class OptionBuilder
 {
     private char? _shortOption;
     private string? _longOption;
     private int _maxOccurs = 1;
     private string? _group;
-    private string? _description;
     private readonly List<ParameterSpec> _parameters = [];
+    private readonly StringBuilder _descriptionBuilder = new StringBuilder();
 
     public OptionBuilder WithShortOption(char? c)
     {
@@ -32,9 +34,9 @@ public class OptionBuilder
         return this;
     }
 
-    public OptionBuilder WithDescription(string? description)
+    public OptionBuilder AppendDescription(string? description)
     {
-        _description = description;
+        _descriptionBuilder.AppendLine(description);
         return this;
     }
 
@@ -52,7 +54,7 @@ public class OptionBuilder
         if (_maxOccurs < 1)
             throw new InvalidOperationException("MaxOccurs must be at least 1.");
 
-        return new Option(_shortOption, _longOption, _maxOccurs, _group, _description, _parameters);
+        return new Option(_shortOption, _longOption, _maxOccurs, _group, _descriptionBuilder.ToString(), _parameters);
     }
 
     public OptionBuilder Reset()
