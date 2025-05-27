@@ -5,21 +5,6 @@ namespace Cumber.HelpSystem;
 
 public class HelpTextParser
 {
-    private static readonly Regex HeaderRegex = new(@"^(=+)\s*(.+)$");
-
-    private static readonly Regex OptionLineRegex = new(
-        """
-            ^\s*                            # Leading whitespace
-            (?:-(\w),?\s*)?                 # Optional short option (e.g. -f or -f,)
-            (--[\w-]+)?                     # Optional long option (e.g. --file)
-            (?:\s+(<[^>]+>|\[[^\]]+\]))?    # Optional parameter 1
-            (?:\s+(<[^>]+>|\[[^\]]+\]))?    # Optional parameter 2
-            (?:\s+(<[^>]+>|\[[^\]]+\]))?    # Optional parameter 3
-            .*                              # Remainder (description)
-        """,
-        RegexOptions.IgnorePatternWhitespace
-    );
-
     public static void DumpAllHelp(List<HelpSection> sections, string outputPath)
     {
         using var writer = new StreamWriter(outputPath);
@@ -61,7 +46,7 @@ public class HelpTextParser
             ?.Options ?? [];
     }
 
-    public static List<HelpSection> Parse(string rawText, string toolName)
+    public static List<HelpSection> Parse(string rawText)
     {
         bool foundFirstHeader = false;
         var definedGroups = new Dictionary<string, List<Option>>();
@@ -69,17 +54,19 @@ public class HelpTextParser
         List<HelpSection> sections = [];
 
         HelpSection? currentSection = null;
-        string? currentCommand = null;
-        bool inOptions = false;
         string? currentGroup = null;
         OptionBuilder? currentBuilder = null;
+        bool inOptions = false;
+
+        var commandStack = new Stack<string>();
 
         foreach (var rawLine in lines)
         {
             var line = rawLine.TrimEnd();
+
             if (!foundFirstHeader)
             {
-                if (HeaderRegex.IsMatch(line))
+                if (HelpTextRegexes.HeaderRegex.IsMatch(line))
                 {
                     foundFirstHeader = true;
                 }
@@ -92,7 +79,7 @@ public class HelpTextParser
                         continue;
                     }
 
-                    if (currentGroup != null && OptionLineRegex.IsMatch(line))
+                    if (currentGroup != null && HelpTextRegexes.OptionLineRegex.IsMatch(line))
                     {
                         definedGroups[currentGroup].Add(ParseOptionLine(line, "@group"));
                     }
@@ -102,45 +89,29 @@ public class HelpTextParser
 
             if (string.IsNullOrWhiteSpace(line)) continue;
 
-            var headerMatch = HeaderRegex.Match(line);
+            var headerMatch = HelpTextRegexes.HeaderRegex.Match(line);
             if (headerMatch.Success)
             {
-                int level = headerMatch.Groups[1].Value.Length;
-                var headerContent = headerMatch.Groups[2].Value.Trim();
+                int level = headerMatch.Groups["headerIntroducer"].Value.Length;
+                var headerContent = headerMatch.Groups["commandName"].Value.Trim();
                 var name = headerContent;
                 var summary = "";
                 var dashIndex = headerContent.IndexOf(" - ");
                 if (dashIndex >= 0)
                 {
-                    name = headerContent.Substring(0, dashIndex).Trim();
+                    name = headerContent[..dashIndex].Trim();
                     summary = headerContent[(dashIndex + 3)..].Trim();
                 }
 
-                if (level == 1)
+                while (commandStack.Count >= level)
                 {
-                    if (string.Equals(name, toolName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        currentCommand = "";
-                        currentSection = new HelpSection { CommandPath = "", CommandSummary = summary };
-                        sections.Add(currentSection);
-                    }
-                    else
-                    {
-                        currentCommand = null;
-                        currentSection = null;
-                    }
-                    continue;
+                    commandStack.Pop();
                 }
+                commandStack.Push(name);
+                var fullCommand = string.Join(" ", commandStack.Reverse());
 
-                if (currentCommand != null)
-                {
-                    var fullCommand = name;
-                    if (level > 2 && currentSection != null)
-                        fullCommand = currentSection.CommandPath + " " + name;
-
-                    currentSection = new HelpSection { CommandPath = fullCommand, CommandSummary = summary };
-                    sections.Add(currentSection);
-                }
+                currentSection = new HelpSection { CommandPath = fullCommand, CommandSummary = summary };
+                sections.Add(currentSection);
 
                 inOptions = false;
                 continue;
@@ -158,7 +129,7 @@ public class HelpTextParser
             {
                 if (line.Trim().StartsWith("@include "))
                 {
-                    var groupName = line.Trim().Substring(9).Trim();
+                    var groupName = line.Trim()[9..].Trim();
                     if (definedGroups.TryGetValue(groupName, out var groupOptions))
                     {
                         foreach (var opt in groupOptions)
@@ -178,7 +149,7 @@ public class HelpTextParser
                     continue;
                 }
 
-                if (OptionLineRegex.IsMatch(line))
+                if (HelpTextRegexes.OptionLineRegex.IsMatch(line))
                 {
                     var option = ParseOptionLine(line, currentSection.CommandPath);
                     currentSection.Options.Add(option);
@@ -203,13 +174,15 @@ public class HelpTextParser
             }
             else
             {
-                var cleanLine = line.StartsWith("\\#") ? line.Substring(1) : line;
+                var cleanLine = line.StartsWith("\\#") ? line[1..] : line;
                 currentSection.HelpText += FormatAsciiDoc(cleanLine) + "\n";
             }
         }
 
         return sections;
     }
+
+
 
     public static void PrintHelp(List<HelpSection> sections, string commandPath)
     {
@@ -283,7 +256,7 @@ public class HelpTextParser
 
     private static Option ParseOptionLine(string line, string group)
     {
-        var match = OptionLineRegex.Match(line);
+        var match = HelpTextRegexes.OptionLineRegex.Match(line);
         var shortName = match.Groups[1].Success ? match.Groups[1].Value[0] : (char?)null;
         var longName = match.Groups[2].Success ? match.Groups[2].Value.Substring(2) : null;
 
@@ -315,4 +288,56 @@ public class HelpTextParser
 
         return builder.Build();
     }
+
+    public static bool GetHelpTextWithOptions(string[] args, int n, List<HelpSection> sections, out string helpText)
+    {
+        helpText = "";
+        var command = string.Join(" ", args.Take(n));
+        var section = sections.FirstOrDefault(s => s.CommandPath.Equals(command, StringComparison.OrdinalIgnoreCase));
+
+        // TODO:
+        var l0 = sections.Select(x => x.CommandPath).ToList();
+
+        if (section == null)
+            return false;
+
+        var builder = new System.Text.StringBuilder();
+        if (!string.IsNullOrWhiteSpace(section.HelpText))
+            builder.AppendLine(section.HelpText.TrimEnd());
+
+        if (section.Options.Count > 0)
+        {
+            builder.AppendLine();
+            builder.AppendLine("Options:");
+            foreach (var opt in section.Options)
+            {
+                var parts = new List<string>();
+                if (opt.ShortOption != null)
+                    parts.Add("-" + opt.ShortOption);
+                if (!string.IsNullOrEmpty(opt.LongOption))
+                    parts.Add("--" + opt.LongOption);
+
+                foreach (var param in opt.Parameters)
+                {
+                    var typeSuffix = string.IsNullOrEmpty(param.Type) ? "" : $":{param.Type}";
+                    parts.Add($"<{param.Name}{typeSuffix}>");
+                }
+
+                builder.AppendLine("  " + string.Join(" ", parts));
+
+                if (!string.IsNullOrWhiteSpace(opt.Description))
+                {
+                    var lines = opt.Description.Split('\n');
+                    foreach (var descLine in lines)
+                    {
+                        builder.AppendLine("    " + descLine.TrimEnd());
+                    }
+                }
+            }
+        }
+
+        helpText = builder.ToString().TrimEnd();
+        return true;
+    }
 }
+

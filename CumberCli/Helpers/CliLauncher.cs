@@ -10,7 +10,7 @@ public static class CliLauncher
     public static async Task<int> RunAsync(string helpText, string[] args, Assembly commandsAssembly)
     {
         var toolName = Path.GetFileNameWithoutExtension(Environment.GetCommandLineArgs()[0]);
-        var sections = HelpTextParser.Parse(helpText, toolName);
+        var sections = HelpTextParser.Parse(helpText);
 
         // Handle top-level help or help for a specific command
         if (args.Length == 0 || args.Contains("--help") || args[0] == "help")

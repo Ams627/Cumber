@@ -11,10 +11,3 @@ public sealed class CommandHandlerAttribute : Attribute
     }
 }
 
-public class HelpAccessor
-{
-    IHelpAccessor HelpAccessor.Create(string helptext, string toolName)
-
-
-    }
-
