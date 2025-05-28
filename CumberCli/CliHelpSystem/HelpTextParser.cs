@@ -59,80 +59,56 @@ public class HelpTextParser
         bool inOptions = false;
         bool collectingOptionDescription = false;
 
-        var commandStack = new Stack<string>();
-
         foreach (var rawLine in lines)
         {
             var endTrimmedLine = rawLine.TrimEnd();
 
             if (!foundFirstHeader)
             {
+                // everything we do in this block is processing lines before the first header:
                 if (HelpTextRegexes.HeaderRegex.IsMatch(endTrimmedLine))
                 {
                     foundFirstHeader = true;
                 }
-                else
-                {
-                    var defineGroupMatch = HelpTextRegexes.DefineGroupRegex.Match(rawLine);
-                    if (!defineGroupMatch.Success || !defineGroupMatch.Groups["groupName"].Success)
-                    {
-                        continue;
-                    }
-                    currentGroupName = defineGroupMatch.Groups["groupName"].Value;
-                    definedGroups[currentGroupName] = [];
-                    continue;
-                }
-
-                if (currentGroupName != null)
+                else if (currentGroupName != null)
                 {
                     if (HelpTextRegexes.OptionLineRegex.IsMatch(endTrimmedLine))
                     {
-                        definedGroups[currentGroupName].Add(ParseOptionLine(endTrimmedLine, "@group"));
+                        definedGroups[currentGroupName].Add(ParseOptionLine(endTrimmedLine));
                         collectingOptionDescription = true;
                     }
                     else if (collectingOptionDescription && HelpTextRegexes.WhiteSpaceAtStart.IsMatch(endTrimmedLine))
                     {
                         definedGroups[currentGroupName][^1].AppendDescription(" ");
-                        definedGroups[currentGroupName][^1].AppendDescription(endTrimmedLine.Trim());
+                        definedGroups[currentGroupName][^1].AppendDescription(FormatAsciiDoc(endTrimmedLine.Trim()));
                     }
                     else
                     {
                         collectingOptionDescription = false;
                     }
                 }
+                else if (DefineGroupIntroducer.TryCreate(rawLine, out DefineGroupIntroducer? defineGroupIntroducer))
+                {
+                    // found an option group definition starting with @group:
+                    currentGroupName = defineGroupIntroducer!.GroupName;
+                    definedGroups[currentGroupName] = [];
+                }
                 continue;
             }
 
-            var headerMatch = HelpTextRegexes.HeaderRegex.Match(endTrimmedLine);
-            if (headerMatch.Success)
+            if (CommandHeader.TryCreate(rawLine, out CommandHeader? commandHeader))
             {
-                int level = headerMatch.Groups["headerIntroducer"].Value.Length;
-                var command = headerMatch.Groups["commandName"].Value;
-                var name = command;
-                var summary = "";
-                var dashIndex = command.IndexOf(" - ");
-                if (dashIndex >= 0)
-                {
-                    name = command[..dashIndex].Trim();
-                    summary = command[(dashIndex + 3)..].Trim();
-                }
-
-                while (commandStack.Count >= level - 1)
-                {
-                    commandStack.Pop();
-                }
-                commandStack.Push(name);
-                var fullCommand = string.Join(" ", commandStack.Reverse());
-
-                currentSection = new HelpSection { CommandPath = fullCommand, CommandSummary = summary };
+                currentSection = new HelpSection { CommandPath = commandHeader!.FullCommand, CommandSummary = commandHeader.CommandSummary };
                 sections.Add(currentSection);
 
                 inOptions = false;
                 continue;
             }
 
+            // if we're not in a command, section ignore this line:
             if (currentSection == null) continue;
 
+            // look for options introducer:
             if (endTrimmedLine.Trim().Equals("Options:", StringComparison.OrdinalIgnoreCase))
             {
                 currentSection.HelpText += "Options:" + Environment.NewLine;
@@ -140,35 +116,32 @@ public class HelpTextParser
                 continue;
             }
 
+            // include an options group if the line contains @include. Indent the group
+            // at the same level as the @include directive itself
+            if (inOptions && IncludeHeader.TryCreate(rawLine, out IncludeHeader? includeHeader))
+            {
+                if (definedGroups.TryGetValue(includeHeader!.GroupName, out var groupOptions))
+                {
+                    foreach (var optBuilder in groupOptions)
+                    {
+                        var opt = optBuilder.Build();
+                        currentSection.Options.Add(opt);
+                        currentSection.HelpText += $"{includeHeader!.Indent}{opt.Description}";
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Warning: invalid options group");
+                }
+                continue;
+            }
+
             if (inOptions)
             {
-                // allow @include to include option groups:
-                var includeMatch = HelpTextRegexes.IncludeGroupRegex.Match(endTrimmedLine);
-                if (includeMatch.Success)
-                {
-                    var grpNameMatch = includeMatch.Groups["groupName"];
-                    if (grpNameMatch.Success)
-                    {
-                        var groupName = grpNameMatch.Value;
-                        if (definedGroups.TryGetValue(groupName, out var groupOptions))
-                        {
-                            var wsGrp = includeMatch.Groups["whiteSpace"];
-                            var indent = wsGrp.Success ? wsGrp.Value : string.Empty;
-                            foreach (var optBuilder in groupOptions)
-                            {
-                                var opt = optBuilder.Build();
-                                currentSection.Options.Add(opt);
-                                currentSection.HelpText += $"{indent}{opt.Description}";
-                            }
-                        }
-                    }
-                    continue;
-                }
-
                 // check for lines matching an option specification:
                 if (HelpTextRegexes.OptionLineRegex.IsMatch(endTrimmedLine))
                 {
-                    var optionBuilder = ParseOptionLine(endTrimmedLine, currentSection.CommandPath);
+                    var optionBuilder = ParseOptionLine(endTrimmedLine);
                     currentSection.Options.Add(optionBuilder.Build());
                     currentSection.HelpText += FormatAsciiDoc(endTrimmedLine) + Environment.NewLine;
                 }
@@ -266,11 +239,11 @@ public class HelpTextParser
         return input;
     }
 
-    private static OptionBuilder ParseOptionLine(string line, string group)
+    private static OptionBuilder ParseOptionLine(string line)
     {
         var match = HelpTextRegexes.OptionLineRegex.Match(line);
-        var shortName = match.Groups[1].Success ? match.Groups[1].Value[0] : (char?)null;
-        var longName = match.Groups[2].Success ? match.Groups[2].Value.Substring(2) : null;
+        var shortName = match.Groups[1].Success ? match.Groups["shortOption"].Value[0] : (char?)null;
+        var longName = match.Groups[2].Success ? match.Groups["longOption"].Value.Substring(2) : null;
 
         var parameters = new List<(string Name, string? Type)>();
         for (int i = 3; i < match.Groups.Count; i++)
@@ -288,8 +261,7 @@ public class HelpTextParser
         var builder = new OptionBuilder()
             .WithShortOption(shortName)
             .WithLongOption(longName)
-            .WithGroup(group)
-            .AppendDescription(line);
+            .AppendDescription(FormatAsciiDoc(line));
 
         foreach (var (name, type) in parameters)
         {

@@ -59,7 +59,7 @@ public class OptionsParser
                 {
                     var name = arg[2..eqPos];
                     var value = arg[(eqPos + 1)..];
-                    if (!_longOptions.TryGetValue(name, out Option? spec) || spec.Group != null && !allowed.Contains(spec.Group))
+                    if (!_longOptions.TryGetValue(name, out Option? spec))
                     {
                         illegalOptions.Add(new(name, index, ErrorCodes.OptionNotSpecified));
                         continue;
@@ -79,7 +79,7 @@ public class OptionsParser
                 else
                 {
                     var optionName = arg[2..];
-                    if (!_longOptions.TryGetValue(optionName, out var spec) || spec.Group != null && !allowed.Contains(spec.Group))
+                    if (!_longOptions.TryGetValue(optionName, out var spec))
                     {
                         illegalOptions.Add(new(optionName, index, ErrorCodes.OptionNotSpecified));
                         continue;
@@ -107,7 +107,7 @@ public class OptionsParser
                         var c = arg[i];
                         var isLast = i == arg.Length - 1;
 
-                        if (!_shortOptions.TryGetValue(c, out var spec) || spec.Group != null && !allowed.Contains(spec.Group))
+                        if (!_shortOptions.TryGetValue(c, out var spec))
                         {
                             illegalOptions.Add(new(c.ToString(), index, ErrorCodes.OptionNotSpecified));
                             continue;

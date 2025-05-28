@@ -24,12 +24,20 @@ class CommandHeader
             _commandStack.Clear();
         }
 
+
         var commandGrp = match.Groups["commandName"];
         if (!commandGrp.Success)
         {
             commandHeader = default;
             return false;
         }
+
+        while (_commandStack.Count >= level - 1)
+        {
+            _commandStack.Pop();
+        }
+        _commandStack.Push(commandGrp.Value);
+
 
         var commandSummaryGrp = match.Groups["commandSummary"];
         string commandSummary = commandSummaryGrp.Success ? commandSummaryGrp.Value : string.Empty;

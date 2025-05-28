@@ -6,7 +6,6 @@ public class OptionBuilder
     private char? _shortOption;
     private string? _longOption;
     private int _maxOccurs = 1;
-    private string? _group;
     private readonly List<ParameterSpec> _parameters = [];
     private readonly StringBuilder _descriptionBuilder = new StringBuilder();
 
@@ -25,12 +24,6 @@ public class OptionBuilder
     public OptionBuilder WithMaxOccurs(int max)
     {
         _maxOccurs = max;
-        return this;
-    }
-
-    public OptionBuilder WithGroup(string? group)
-    {
-        _group = group;
         return this;
     }
 
@@ -54,7 +47,7 @@ public class OptionBuilder
         if (_maxOccurs < 1)
             throw new InvalidOperationException("MaxOccurs must be at least 1.");
 
-        return new Option(_shortOption, _longOption, _maxOccurs, _group, _descriptionBuilder.ToString(), _parameters);
+        return new Option(_shortOption, _longOption, _maxOccurs, _descriptionBuilder.ToString(), _parameters);
     }
 
     public OptionBuilder Reset()
@@ -62,7 +55,6 @@ public class OptionBuilder
         _shortOption = '\0';
         _longOption = null;
         _maxOccurs = 1;
-        _group = null;
         return this;
     }
 }

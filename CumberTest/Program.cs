@@ -1,4 +1,6 @@
 ﻿using Cumber.HelpSystem;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Cumber;
 
@@ -9,7 +11,7 @@ class Program
         they will not be displayed.
 
         @group Sphincter
-            -a, --all       let's read all the files.
+            -a, --all       let's read all the _files_.
         Hello, world
                             yes, all of them you daft prick!
             -b, --bottom - let's read all the files from the bottom to the top!
@@ -67,9 +69,16 @@ class Program
 
             var path = string.Join(" ", args);
             var instance = lk[path].First();
-            Console.WriteLine(instance.HelpText);
+            var text = instance.HelpText;
 
-            Console.WriteLine($"There are {instance.Options.Count} options.");
+            var rewrapped = RewrapText(text, 80);
+            Console.WriteLine(rewrapped);
+
+            Console.WriteLine($"There are {instance.Options.Count} options:");
+            foreach (var opt in instance.Options)
+            {
+                Console.WriteLine($"    -{opt.ShortOption} {opt.LongOption}: {opt.Description}");
+            }
 
             await Task.CompletedTask;
         }
@@ -77,7 +86,51 @@ class Program
         {
             var fullname = System.Reflection.Assembly.GetEntryAssembly().Location;
             var progname = Path.GetFileNameWithoutExtension(fullname);
-            Console.Error.WriteLine($"{progname} Error: {ex.Message}");
+            Console.Error.WriteLine($"{progname} Error: {ex}");
         }
     }
+
+    static string RewrapText(string input, int width)
+    {
+        // Normalize line endings and split into paragraphs
+        string normalized = input.Replace("\r\n", "\n");
+        string[] paragraphs = Regex.Split(normalized, @"\n\s*\n");
+
+        var sb = new StringBuilder();
+
+        foreach (string para in paragraphs)
+        {
+            // Remove single newlines, compress whitespace to single spaces
+            string clean = Regex.Replace(para, @"\s*\n\s*", " ");
+            clean = Regex.Replace(clean, @"\s+", " ").Trim();
+
+            // Re-wrap text to the specified width
+            int lineStart = 0;
+            while (lineStart < clean.Length)
+            {
+                int remaining = clean.Length - lineStart;
+                int lineLength = Math.Min(width, remaining);
+                int searchEnd = lineStart + lineLength;
+
+                // Look for last space in the allowed range
+                int lastSpace = clean.LastIndexOf(' ', searchEnd - 1, lineLength);
+
+                if (lastSpace > lineStart)
+                {
+                    sb.AppendLine(clean.Substring(lineStart, lastSpace - lineStart));
+                    lineStart = lastSpace + 1;
+                }
+                else
+                {
+                    // No space found, hard wrap
+                    sb.AppendLine(clean.Substring(lineStart, lineLength));
+                    lineStart += lineLength;
+                }
+            }
+            sb.AppendLine(); // blank line between paragraphs
+        }
+
+        return sb.ToString().TrimEnd(); // Remove trailing blank lines
+    }
+
 }
