@@ -43,9 +43,11 @@ public static class HelpTextRegexes
                     |                                   # alternation
                     (?:-(?'shortOption'\w)\s*)          # short option (e.g. -f or -f,)
                     )                                   # end of option group
-                    (?:\s+(<[^>]+>|\[[^\]]+\]))?        # Optional parameter 1
-                    (?:\s+(<[^>]+>|\[[^\]]+\]))?        # Optional parameter 2
-                    (?:\s+(<[^>]+>|\[[^\]]+\]))?        # Optional parameter 3
+                    (?:\s+(?'param1'<[^>]+>|\[[^\]]+\]))?        # Optional parameter 1
+                    (?:\s+(?'param2'<[^>]+>|\[[^\]]+\]))?        # Optional parameter 2
+                    (?:\s+(?'param3'<[^>]+>|\[[^\]]+\]))?        # Optional parameter 3
+                    (?:\s+(?'param4'<[^>]+>|\[[^\]]+\]))?        # Optional parameter 3
+                    (?:\s+(?'param5'<[^>]+>|\[[^\]]+\]))?        # Optional parameter 3
                     .*                                  # Remainder (description)
                 """,
         RegexOptions.IgnorePatternWhitespace

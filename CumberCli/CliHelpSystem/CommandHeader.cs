@@ -5,7 +5,7 @@ class CommandHeader
     public string Command { get; private init; } = string.Empty;
     public string FullCommand { get; private init; } = string.Empty;
     public string CommandSummary { get; private init; } = string.Empty;
-
+    public int CommandLevel { get; private init; }
 
     private static Stack<string> _commandStack = [];
     public static bool TryCreate(string line, out CommandHeader? commandHeader)
@@ -24,7 +24,6 @@ class CommandHeader
             _commandStack.Clear();
         }
 
-
         var commandGrp = match.Groups["commandName"];
         if (!commandGrp.Success)
         {
@@ -32,17 +31,16 @@ class CommandHeader
             return false;
         }
 
-        while (_commandStack.Count >= level - 1)
+        while (_commandStack.Count >= level)
         {
             _commandStack.Pop();
         }
         _commandStack.Push(commandGrp.Value);
 
-
         var commandSummaryGrp = match.Groups["commandSummary"];
         string commandSummary = commandSummaryGrp.Success ? commandSummaryGrp.Value : string.Empty;
 
-        commandHeader = new CommandHeader { Command = commandGrp.Value, FullCommand = string.Join(" ", _commandStack.Reverse()), CommandSummary = commandSummary };
+        commandHeader = new CommandHeader { Command = commandGrp.Value, FullCommand = string.Join(" ", _commandStack.Reverse()), CommandSummary = commandSummary, CommandLevel = level - 1 };
         return true;
     }
 }

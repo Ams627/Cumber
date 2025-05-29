@@ -84,21 +84,26 @@ public class HelpTextParser
                     }
                     else
                     {
+                        if (collectingOptionDescription)
+                        {
+                            definedGroups[currentGroupName][^1].AppendDescription("\u21b5");
+                        }
                         collectingOptionDescription = false;
                     }
+                    continue;
                 }
                 else if (DefineGroupIntroducer.TryCreate(rawLine, out DefineGroupIntroducer? defineGroupIntroducer))
                 {
                     // found an option group definition starting with @group:
                     currentGroupName = defineGroupIntroducer!.GroupName;
                     definedGroups[currentGroupName] = [];
+                    continue;
                 }
-                continue;
             }
 
             if (CommandHeader.TryCreate(rawLine, out CommandHeader? commandHeader))
             {
-                currentSection = new HelpSection { CommandPath = commandHeader!.FullCommand, CommandSummary = commandHeader.CommandSummary };
+                currentSection = new HelpSection { CommandPath = commandHeader!.FullCommand, CommandSummary = commandHeader.CommandSummary, CommandLength = commandHeader.CommandLevel };
                 sections.Add(currentSection);
 
                 inOptions = false;
@@ -111,7 +116,7 @@ public class HelpTextParser
             // look for options introducer:
             if (endTrimmedLine.Trim().Equals("Options:", StringComparison.OrdinalIgnoreCase))
             {
-                currentSection.HelpText += "Options:" + Environment.NewLine;
+                currentSection.HelpText += "Options:" + "\u21B5";
                 inOptions = true;
                 continue;
             }
@@ -141,17 +146,29 @@ public class HelpTextParser
                 // check for lines matching an option specification:
                 if (HelpTextRegexes.OptionLineRegex.IsMatch(endTrimmedLine))
                 {
+                    if (collectingOptionDescription)
+                    {
+                        collectingOptionDescription = false;
+                        currentSection.HelpText += "\u21b5";
+                    }
                     var optionBuilder = ParseOptionLine(endTrimmedLine);
                     currentSection.Options.Add(optionBuilder.Build());
-                    currentSection.HelpText += FormatAsciiDoc(endTrimmedLine) + Environment.NewLine;
+                    currentSection.HelpText += FormatAsciiDoc(endTrimmedLine);
+                    collectingOptionDescription = true;
                 }
-                else if (currentBuilder != null && endTrimmedLine.StartsWith(" "))
+                else if (collectingOptionDescription && currentBuilder != null && endTrimmedLine.StartsWith(" "))
                 {
-                    var last = currentSection.Options.Last();
-                    currentSection.Options[^1] = last with { Description = last.Description + Environment.NewLine + FormatAsciiDoc(endTrimmedLine.Trim()) };
+                    currentSection.HelpText += " " + FormatAsciiDoc(endTrimmedLine);
                 }
                 else
                 {
+                    if (collectingOptionDescription)
+                    {
+                        currentSection.HelpText += " " + FormatAsciiDoc(endTrimmedLine);
+                        //var last = currentSection.Options.Last();
+                        //currentSection.Options[^1] = last with { Description = last.Description + "\u21B5" };
+                    }
+                    collectingOptionDescription = false;
                     currentSection.HelpText += endTrimmedLine + Environment.NewLine;
                 }
             }
@@ -242,13 +259,17 @@ public class HelpTextParser
     private static OptionBuilder ParseOptionLine(string line)
     {
         var match = HelpTextRegexes.OptionLineRegex.Match(line);
-        var shortName = match.Groups[1].Success ? match.Groups["shortOption"].Value[0] : (char?)null;
-        var longName = match.Groups[2].Success ? match.Groups["longOption"].Value.Substring(2) : null;
+
+        Group shortOptionGroup = match.Groups["shortOption"];
+        Group longOptionGroup = match.Groups["longOption"];
+
+        var shortName = shortOptionGroup.Success ? shortOptionGroup.Value[0] : (char?)null;
+        var longName = longOptionGroup.Success ? longOptionGroup.Value : null;
 
         var parameters = new List<(string Name, string? Type)>();
-        for (int i = 3; i < match.Groups.Count; i++)
+        for (int i = 0; i < 5; i++)
         {
-            var g = match.Groups[i];
+            var g = match.Groups[$"param{i}"];
             if (g.Success)
             {
                 var paramMatch = Regex.Match(g.Value, "<(?<name>[^:>]+)(:(?<type>[^>]+))?>");
@@ -269,57 +290,6 @@ public class HelpTextParser
         }
 
         return builder;
-    }
-
-    public static bool GetHelpTextWithOptions(string tool, string[] args, int n, List<HelpSection> sections, out string helpText)
-    {
-        helpText = "";
-        var command = string.Join(" ", args.Take(n));
-        var section = sections.FirstOrDefault(s => s.CommandPath.Equals(command, StringComparison.OrdinalIgnoreCase));
-
-        // TODO:
-        var l0 = sections.Select(x => x.CommandPath).ToList();
-
-        if (section == null)
-            return false;
-
-        var builder = new System.Text.StringBuilder();
-        if (!string.IsNullOrWhiteSpace(section.HelpText))
-            builder.AppendLine(section.HelpText.TrimEnd());
-
-        if (section.Options.Count > 0)
-        {
-            builder.AppendLine();
-            builder.AppendLine("Options:");
-            foreach (var opt in section.Options)
-            {
-                var parts = new List<string>();
-                if (opt.ShortOption != null)
-                    parts.Add("-" + opt.ShortOption);
-                if (!string.IsNullOrEmpty(opt.LongOption))
-                    parts.Add("--" + opt.LongOption);
-
-                foreach (var param in opt.Parameters)
-                {
-                    var typeSuffix = string.IsNullOrEmpty(param.Type) ? "" : $":{param.Type}";
-                    parts.Add($"<{param.Name}{typeSuffix}>");
-                }
-
-                builder.AppendLine("  " + string.Join(" ", parts));
-
-                if (!string.IsNullOrWhiteSpace(opt.Description))
-                {
-                    var lines = opt.Description.Split('\n');
-                    foreach (var descLine in lines)
-                    {
-                        builder.AppendLine("    " + descLine.TrimEnd());
-                    }
-                }
-            }
-        }
-
-        helpText = builder.ToString().TrimEnd();
-        return true;
     }
 }
 

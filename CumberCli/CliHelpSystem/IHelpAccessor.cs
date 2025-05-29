@@ -22,6 +22,7 @@ public interface IHelpAccessor
     /// <param name="helpText">The returned helptext</param>
     /// <returns>true if a complete command from the root to the leaf node is matched; false otherwise</returns>
     bool GetHelpTextForCommand(string toolName, string[] args, int n, out string helpText);
+    bool GetHelpSectionForCommand(string toolName, IEnumerable<string> args, int n, out HelpSection? helpSection);
 
     /// <summary>
     /// Get the valid options for a command.
@@ -47,4 +48,3 @@ public interface IHelpAccessor
     /// <returns>All the help text or the help text for the tool</returns>
     string DumpAllHelp(string? toolName = null);
 }
-

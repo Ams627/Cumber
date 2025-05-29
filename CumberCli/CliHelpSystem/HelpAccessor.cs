@@ -1,5 +1,4 @@
 ﻿using Cumber.CliOption;
-using System.Text;
 
 namespace Cumber.HelpSystem;
 
@@ -28,7 +27,8 @@ public class HelpAccessor : IHelpAccessor
 
     public bool GetHelpTextForCommand(string toolName, string[] args, int n, out string? helpText)
     {
-        HelpSection? section = FindSection(toolName, [.. args.Take(n)], out var index);
+        string[] argsToUse = n < 0 ? [.. args] : [.. args.Take(n)];
+        HelpSection? section = FindSection(toolName, argsToUse, out var index);
 
         if (section == null)
         {
@@ -36,53 +36,25 @@ public class HelpAccessor : IHelpAccessor
             return false;
         }
 
-        var builder = new StringBuilder();
-        if (!string.IsNullOrWhiteSpace(section.HelpText))
-        {
-            builder.AppendLine(section.HelpText.TrimEnd());
-        }
-
-        if (section.Options.Count > 0)
-        {
-            builder.AppendLine();
-            builder.AppendLine("Options:");
-            foreach (var opt in section.Options)
-            {
-                var parts = new List<string>();
-                if (opt.ShortOption != null)
-                    parts.Add("-" + opt.ShortOption);
-                if (!string.IsNullOrEmpty(opt.LongOption))
-                    parts.Add("--" + opt.LongOption);
-
-                foreach (var param in opt.Parameters)
-                {
-                    var typeSuffix = string.IsNullOrEmpty(param.Type) ? "" : $":{param.Type}";
-                    parts.Add($"<{param.Name}{typeSuffix}>");
-                }
-
-                builder.AppendLine("  " + string.Join(" ", parts));
-
-                if (!string.IsNullOrWhiteSpace(opt.Description))
-                {
-                    var lines = opt.Description.Split('\n');
-                    foreach (var descLine in lines)
-                    {
-                        builder.AppendLine("    " + descLine.TrimEnd());
-                    }
-                }
-            }
-        }
-
-        helpText = builder.ToString().TrimEnd();
+        helpText = section.HelpText.TrimEnd();
         return true;
-
-
+    }
+    public bool GetHelpSectionForCommand(string toolName, IEnumerable<string> args, int n, out HelpSection? helpSection)
+    {
+        string[] argsToUse = n < 0 ? [.. args] : [.. args.Take(n)];
+        helpSection = FindSection(toolName, argsToUse, out var index);
+        return helpSection != null;
     }
 
     public List<Option> GetPermittedOptionsForCommand(string toolName, string[] args, int n)
     {
-        var section = FindSection(toolName, args.Take(n).ToArray(), out _);
-        return section is not null ? HelpTextParser.GetOptions(_sections, section.CommandPath) : new();
+        string[] argsToUse = n < 0 ? [.. args] : [.. args.Take(n)];
+        var section = FindSection(toolName, argsToUse, out _);
+        if (section == null)
+        {
+            return [];
+        }
+        return section.Options;
     }
 
     public string DumpCommandTree(string? toolName = null)
@@ -119,6 +91,12 @@ public class HelpAccessor : IHelpAccessor
         foreach (var section in _sections)
         {
             var commandParts = section.CommandPath.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+            if (section.CommandPath == "doit all")
+            {
+                Console.WriteLine();
+            }
+
             if (commandParts.Length > inputWords.Length)
                 continue;
 

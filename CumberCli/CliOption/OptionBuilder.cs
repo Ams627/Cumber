@@ -29,7 +29,7 @@ public class OptionBuilder
 
     public OptionBuilder AppendDescription(string? description)
     {
-        _descriptionBuilder.AppendLine(description);
+        _descriptionBuilder.Append(description);
         return this;
     }
 

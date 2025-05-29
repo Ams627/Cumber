@@ -1,6 +1,5 @@
-﻿using Cumber.HelpSystem;
-using System.Text;
-using System.Text.RegularExpressions;
+﻿using Cumber.Helpers;
+using System.Reflection;
 
 namespace Cumber;
 
@@ -27,7 +26,7 @@ class Program
 
         
         === all
-        Do **everything** that it is [green]#necessary# to do
+        Do **everything** that it is [green]#necessary# to do for the cat to be appropriately positioned on the charcoal before you light it. The cat will start to scream but this does not matter!
 
         Options:
             @include Sphincter
@@ -53,34 +52,28 @@ class Program
         Options:
             -a, --all       do all of it!
             -b, --briefly   do it briefly
+
         === half
+        This is the halfway staging post!
+
         Options:
             -a, --all       do all of it!
             -b, --briefly   do it briefly
         
+        === three
+        This is 3/4 complete
         
+        Options:
+            -a, --all       do all of it!
+            -b, --briefly   do it briefly
+                
         """;
     private static async Task Main(string[] args)
     {
         try
         {
-            List<HelpSection> sections = HelpTextParser.Parse(HelpText);
-            var lk = sections.ToLookup(x => x.CommandPath);
-
-            var path = string.Join(" ", args);
-            var instance = lk[path].First();
-            var text = instance.HelpText;
-
-            var rewrapped = RewrapText(text, 80);
-            Console.WriteLine(rewrapped);
-
-            Console.WriteLine($"There are {instance.Options.Count} options:");
-            foreach (var opt in instance.Options)
-            {
-                Console.WriteLine($"    -{opt.ShortOption} {opt.LongOption}: {opt.Description}");
-            }
-
-            await Task.CompletedTask;
+            var tool = Path.GetFileNameWithoutExtension(Environment.GetCommandLineArgs()[0]);
+            await CliLauncher.RunAsync(HelpText, tool, args, Assembly.GetExecutingAssembly());
         }
         catch (Exception ex)
         {
@@ -89,48 +82,6 @@ class Program
             Console.Error.WriteLine($"{progname} Error: {ex}");
         }
     }
-
-    static string RewrapText(string input, int width)
-    {
-        // Normalize line endings and split into paragraphs
-        string normalized = input.Replace("\r\n", "\n");
-        string[] paragraphs = Regex.Split(normalized, @"\n\s*\n");
-
-        var sb = new StringBuilder();
-
-        foreach (string para in paragraphs)
-        {
-            // Remove single newlines, compress whitespace to single spaces
-            string clean = Regex.Replace(para, @"\s*\n\s*", " ");
-            clean = Regex.Replace(clean, @"\s+", " ").Trim();
-
-            // Re-wrap text to the specified width
-            int lineStart = 0;
-            while (lineStart < clean.Length)
-            {
-                int remaining = clean.Length - lineStart;
-                int lineLength = Math.Min(width, remaining);
-                int searchEnd = lineStart + lineLength;
-
-                // Look for last space in the allowed range
-                int lastSpace = clean.LastIndexOf(' ', searchEnd - 1, lineLength);
-
-                if (lastSpace > lineStart)
-                {
-                    sb.AppendLine(clean.Substring(lineStart, lastSpace - lineStart));
-                    lineStart = lastSpace + 1;
-                }
-                else
-                {
-                    // No space found, hard wrap
-                    sb.AppendLine(clean.Substring(lineStart, lineLength));
-                    lineStart += lineLength;
-                }
-            }
-            sb.AppendLine(); // blank line between paragraphs
-        }
-
-        return sb.ToString().TrimEnd(); // Remove trailing blank lines
-    }
-
 }
+
+

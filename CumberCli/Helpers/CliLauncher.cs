@@ -1,4 +1,3 @@
-using Cumber.CliOption;
 using Cumber.CommandLine;
 using Cumber.HelpSystem;
 using System.Reflection;
@@ -7,73 +6,36 @@ namespace Cumber.Helpers;
 
 public static class CliLauncher
 {
-    public static async Task<int> RunAsync(string helpText, string[] args, Assembly commandsAssembly)
+    public static async Task<int> RunAsync(string helpText, string toolName, string[] args, Assembly commandsAssembly)
     {
-        var toolName = Path.GetFileNameWithoutExtension(Environment.GetCommandLineArgs()[0]);
-        var sections = HelpTextParser.Parse(helpText);
-
-        // Handle top-level help or help for a specific command
-        if (args.Length == 0 || args.Contains("--help") || args[0] == "help")
+        if (HelpRetriever.TryCreate(helpText, toolName, args, out HelpRetriever? helpTextRetriever))
         {
-            var query = args.Length > 1 && args[0] == "help"
-                ? string.Join(" ", args.Skip(1))
-                : string.Empty;
-
-            HelpTextParser.PrintHelp(sections, query);
-            return 0;
-        }
-
-        // Determine command path and resolve handler
-        var tokens = args.TakeWhile(arg => !arg.StartsWith("-")).ToArray();
-
-        ICommandHandler? handler = null;
-        string commandPath = "";
-
-        for (int i = tokens.Length; i > 0; i--)
-        {
-            var candidate = string.Join(" ", tokens.Take(i));
-            handler = CommandRegistry.Resolve(candidate, commandsAssembly);
-            if (handler != null)
+            if (helpTextRetriever!.IsHelpCommand)
             {
-                commandPath = candidate;
-                break;
+                var rewrapped = TextWrapper.RewrapText(helpTextRetriever!.HelpText);
+                Console.WriteLine(rewrapped);
+                return 0;
             }
-        }
 
-        if (handler is null)
-        {
-            if (tokens.Length > 0)
+            var command = helpTextRetriever.Command;
+            string commandWithoutTool = command.Contains(' ') ? command[(command.IndexOf(' ') + 1)..] : "";
+
+
+            ICommandHandler? handler = CommandRegistry.Resolve(commandWithoutTool, commandsAssembly);
+
+            if (handler is null)
             {
-                Console.Error.WriteLine($"'{tokens[0]}' is not a valid command.");
+                Console.Error.WriteLine($"The command {helpTextRetriever.Command} is not implemented.");
+                return 0;
             }
-            else
-            {
-                Console.Error.WriteLine("No command specified.");
-            }
-            HelpTextParser.PrintHelp(sections, "");
-            return 1;
+
+            var optionParser = new OptionsParser(helpTextRetriever.PermittedOptions);
+            var parsedOptionsResult = optionParser.Parse(args, helpTextRetriever.NumberOfArgsConsumed);
+            var accessor = new OptionAccessor(parsedOptionsResult);
+
+            return await handler.ExecuteAsync(args, accessor);
         }
-
-        // Extract options from remaining args
-        var commandParts = commandPath.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var nonOptionStart = commandParts.Length;
-        var remainingArgs = args.Skip(nonOptionStart).ToArray();
-
-        List<Option> options = HelpTextParser.GetOptions(sections, commandPath);
-        var parser = new OptionsParser(options);
-        var allowedGroups = handler.GetAllowedOptionGroups().Append("@global").ToArray();
-        var parsedOptionsResult = parser.Parse(remainingArgs, allowedGroups: allowedGroups);
-        var accessor = new OptionAccessor(parsedOptionsResult);
-
-        // Append actual non-option tokens from remainingArgs
-        var consumedArgsCount = parsedOptionsResult.NonOptions.Count + parsedOptionsResult.Parsed.SelectMany(x => x.Value).Sum(p => p.Params!.Count + 1);
-        var nonOptionTokens = remainingArgs.Skip(consumedArgsCount).ToArray();
-        foreach (var token in nonOptionTokens)
-        {
-            parsedOptionsResult.NonOptions.Add(new NonOption(token, -1));
-        }
-
-        // Execute the command
-        return await handler.ExecuteAsync(commandParts, accessor);
+        Console.WriteLine("Invalid command");
+        return 0;
     }
 }
